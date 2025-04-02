@@ -1,0 +1,23 @@
+{
+  "server": {
+    "port": ":8080",
+    "read_timeout": "10s",
+    "write_timeout": "10s",
+    "idle_timeout": "10s"
+  },
+  "services": {
+    "user_service_timeout": "10s",
+    "auth_service_timeout": "10s",
+    "book_service_timeout": "10s"
+  },
+  "auth": {
+    "session_life_time": "720h"
+  },
+  "db": {
+    "connection_string": "postgresql://postgres:postgres@localhost:5432/postgres",
+    "max_connections": 10,
+    "min_connections": 1,
+    "max_idle_time": "10m",
+    "max_lifetime": "1h"
+  }
+}
