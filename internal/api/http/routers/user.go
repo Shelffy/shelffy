@@ -1,8 +1,8 @@
 package routers
 
 import (
+	"github.com/Shelffy/shelffy/internal/api/http/handlers"
 	"github.com/go-chi/chi/v5"
-	"github.com/plinkplenk/booki/internal/api/http/handlers"
 	"net/http"
 )
 

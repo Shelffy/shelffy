@@ -2,11 +2,11 @@ package handlers
 
 import (
 	"errors"
+	"github.com/Shelffy/shelffy/internal/api"
+	"github.com/Shelffy/shelffy/internal/api/apictx"
+	"github.com/Shelffy/shelffy/internal/auth"
+	"github.com/Shelffy/shelffy/internal/user"
 	"github.com/google/uuid"
-	"github.com/plinkplenk/booki/internal/api"
-	"github.com/plinkplenk/booki/internal/api/apictx"
-	"github.com/plinkplenk/booki/internal/auth"
-	"github.com/plinkplenk/booki/internal/user"
 	"log/slog"
 	"net/http"
 )

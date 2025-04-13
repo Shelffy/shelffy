@@ -1,8 +1,8 @@
 package resolvers
 
 import (
-	"github.com/plinkplenk/booki/internal/auth"
-	"github.com/plinkplenk/booki/internal/user"
+	"github.com/Shelffy/shelffy/internal/auth"
+	"github.com/Shelffy/shelffy/internal/user"
 	"log/slog"
 )
 

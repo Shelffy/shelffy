@@ -1,4 +1,4 @@
-module github.com/plinkplenk/booki
+module github.com/Shelffy/shelffy
 
 go 1.24.1
 

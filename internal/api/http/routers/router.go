@@ -2,12 +2,12 @@ package routers
 
 import (
 	"github.com/99designs/gqlgen/graphql/playground"
+	"github.com/Shelffy/shelffy/internal/api/http/handlers"
+	"github.com/Shelffy/shelffy/internal/api/middlewares"
+	"github.com/Shelffy/shelffy/internal/auth"
+	"github.com/Shelffy/shelffy/internal/user"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
-	"github.com/plinkplenk/booki/internal/api/http/handlers"
-	"github.com/plinkplenk/booki/internal/api/middlewares"
-	"github.com/plinkplenk/booki/internal/auth"
-	"github.com/plinkplenk/booki/internal/user"
 	"log/slog"
 	"net/http"
 )

@@ -1,10 +1,10 @@
 package handlers
 
 import (
+	"github.com/Shelffy/shelffy/internal/api/apictx"
+	"github.com/Shelffy/shelffy/internal/user"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/plinkplenk/booki/internal/api/apictx"
-	"github.com/plinkplenk/booki/internal/user"
 	"log/slog"
 	"net/http"
 )

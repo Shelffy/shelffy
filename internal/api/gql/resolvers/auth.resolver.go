@@ -9,13 +9,13 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/Shelffy/shelffy/internal/api"
+	"github.com/Shelffy/shelffy/internal/api/apictx"
+	"github.com/Shelffy/shelffy/internal/api/gql/gqlmodel"
+	"github.com/Shelffy/shelffy/internal/api/gql/graph"
+	"github.com/Shelffy/shelffy/internal/auth"
+	"github.com/Shelffy/shelffy/internal/user"
 	"github.com/google/uuid"
-	"github.com/plinkplenk/booki/internal/api"
-	"github.com/plinkplenk/booki/internal/api/apictx"
-	"github.com/plinkplenk/booki/internal/api/gql/gqlmodel"
-	"github.com/plinkplenk/booki/internal/api/gql/graph"
-	"github.com/plinkplenk/booki/internal/auth"
-	"github.com/plinkplenk/booki/internal/user"
 )
 
 // Register is the resolver for the register field.
