@@ -1,0 +1,11 @@
+type User {
+    id: UUID!
+    email: String!
+    isActive: Boolean!
+    createdAt: DateTime!
+}
+
+type Query {
+    me: User! @isAuthenticated
+    user(id: UUID!): User! @isAuthenticated
+}
