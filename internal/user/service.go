@@ -58,6 +58,7 @@ func (s service) Create(ctx context.Context, user User) (User, error) {
 		return User{}, err
 	}
 	user.Password = string(hash)
+	user.ID = uuid.New()
 	c, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 	return s.repository.Create(c, user)

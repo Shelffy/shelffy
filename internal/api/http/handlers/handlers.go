@@ -15,6 +15,7 @@ func getRequestData[T any](r *http.Request) (T, error) {
 }
 
 func response(payload any, code int, w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	messageBytes, err := json.Marshal(payload)
 	if err != nil {

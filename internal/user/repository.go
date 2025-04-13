@@ -35,7 +35,7 @@ type postgresRepository struct {
 	conn *pgxpool.Pool
 }
 
-func NewPostgresRepository(conn *pgxpool.Pool) Repository {
+func NewPsqlRepository(conn *pgxpool.Pool) Repository {
 	return postgresRepository{conn}
 }
 
@@ -49,9 +49,7 @@ func (r postgresRepository) getByField(ctx context.Context, field string, value 
 	query := fmt.Sprintf(`SELECT id, email, password, is_active, created_at FROM users WHERE %s = $1`, field)
 	user, err := r.scanUserRow(r.conn.QueryRow(ctx, query, value))
 	if err != nil {
-		fmt.Printf("err := %e\n", err)
 		if errors.Is(err, pgx.ErrNoRows) {
-			fmt.Printf("here\n")
 			return User{}, ErrUserNotFound
 		} else {
 			return User{}, err

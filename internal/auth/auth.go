@@ -6,8 +6,10 @@ import (
 )
 
 type Session struct {
+	ID        string
 	UserID    uuid.UUID
 	IsActive  bool
 	ExpiresAt time.Time
-	ID        string
 }
+
+var NilSession = Session{}

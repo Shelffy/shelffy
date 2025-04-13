@@ -4,7 +4,7 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"github.com/plinkplenk/booki/internal/api"
-	"github.com/plinkplenk/booki/internal/api/http/schema"
+	"github.com/plinkplenk/booki/internal/api/apictx"
 	"github.com/plinkplenk/booki/internal/auth"
 	"github.com/plinkplenk/booki/internal/user"
 	"log/slog"
@@ -25,8 +25,13 @@ func NewAuthHandler(authService auth.Service, userService user.Service, logger *
 	}
 }
 
+type RegisterRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
 func (h AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
-	registerData, err := getRequestData[schema.Register](r)
+	registerData, err := getRequestData[RegisterRequest](r)
 	if err != nil {
 		h.logger.Error("failed to get request data body data", "error", err)
 		err = errorResponse("invalid data provided", http.StatusBadRequest, w)
@@ -40,11 +45,11 @@ func (h AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		logResponseWriteError(err, h.logger)
 		return
 	} else if err == nil {
-		err = errorResponse("user with this email already exists", http.StatusConflict, w)
+		err = errorResponse("user with this email already exists", http.StatusBadRequest, w)
 		logResponseWriteError(err, h.logger)
 		return
 	}
-	dbUser, err := h.userService.Create(r.Context(), user.User{
+	_, err = h.userService.Create(r.Context(), user.User{
 		ID:       uuid.New(),
 		Email:    registerData.Email,
 		Password: registerData.Password,
@@ -56,12 +61,17 @@ func (h AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		logResponseWriteError(err, h.logger)
 		return
 	}
-	err = successResponse(dbUser, http.StatusCreated, w)
+	err = successResponse("user created", http.StatusCreated, w)
 	logResponseWriteError(err, h.logger)
 }
 
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
 func (h AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
-	loginData, err := getRequestData[schema.Login](r)
+	loginData, err := getRequestData[LoginRequest](r)
 	if err != nil {
 		h.logger.Error("failed to get request data body data", "error", err)
 		err = errorResponse("invalid data provided", http.StatusBadRequest, w)
@@ -69,9 +79,13 @@ func (h AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dbUser, session, err := h.authService.Login(r.Context(), loginData.Email, loginData.Password)
-	if err != nil {
+	if err != nil && !errors.Is(err, auth.ErrInvalidCredentials) {
 		h.logger.Error("failed to create session", "error", err)
 		err = errorResponse("something went wrong", http.StatusInternalServerError, w)
+		logResponseWriteError(err, h.logger)
+		return
+	} else if errors.Is(err, auth.ErrInvalidCredentials) {
+		err = errorResponse("invalid credentials", http.StatusUnauthorized, w)
 		logResponseWriteError(err, h.logger)
 		return
 	}
@@ -81,23 +95,23 @@ func (h AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		Domain:   r.Host,
 		Expires:  session.ExpiresAt,
-		Secure:   true,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
 	}
 	http.SetCookie(w, &cookie)
-	err = successResponse(R{"user": dbUser}, http.StatusOK, w)
+	err = response(R{"user": toUserResponse(dbUser)}, http.StatusOK, w)
 	logResponseWriteError(err, h.logger)
 }
 
 func (h AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
-	sessionCookie, err := r.Cookie(api.SessionIDCookieName)
-	if err != nil || sessionCookie.Value == "" {
-		err = errorResponse("unauthorized", http.StatusUnauthorized, w)
+	ctx := r.Context()
+	sessionID, err := apictx.GetSessionIDFromContext(ctx)
+	if err != nil {
+		h.logger.Error("failed to get session id from context", "error", err)
+		err = errorResponse("something went wrong", http.StatusInternalServerError, w)
 		logResponseWriteError(err, h.logger)
 		return
 	}
-	if err := h.authService.Deactivate(r.Context(), sessionCookie.Value); err != nil {
+	if err := h.authService.Deactivate(ctx, sessionID); err != nil {
 		h.logger.Error("failed to deactivate session", "error", err)
 		err = errorResponse("something went wrong", http.StatusInternalServerError, w)
 		logResponseWriteError(err, h.logger)
@@ -115,6 +129,6 @@ func (h AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		Partitioned: false,
 	}
 	http.SetCookie(w, &newCookie)
-	err = successResponse(nil, http.StatusOK, w)
+	err = response(nil, http.StatusOK, w)
 	logResponseWriteError(err, h.logger)
 }

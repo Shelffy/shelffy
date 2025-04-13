@@ -7,9 +7,9 @@ import (
 )
 
 type User struct {
-	ID        uuid.UUID
-	CreatedAt time.Time
-	Email     string
-	Password  string
-	IsActive  bool
+	ID        uuid.UUID `json:"id,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	Email     string    `json:"email,omitempty"`
+	Password  string    `json:"password,omitempty"`
+	IsActive  bool      `json:"is_active,omitempty"`
 }

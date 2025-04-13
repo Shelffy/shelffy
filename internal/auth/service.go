@@ -2,7 +2,7 @@ package auth
 
 import (
 	"context"
-	"crypto/sha512"
+	"crypto/rand"
 	"encoding/hex"
 	"errors"
 	"github.com/google/uuid"
@@ -11,7 +11,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"log/slog"
 	"time"
-	"unsafe"
 )
 
 var (
@@ -21,10 +20,10 @@ var (
 
 type Service interface {
 	Login(ctx context.Context, email, password string) (user.User, Session, error)
-	Logout(ctx context.Context, token string) error
+	Logout(ctx context.Context, sessionID string) error
 	GetSessionByID(ctx context.Context, id string) (Session, error)
 	GetSessionByUserID(ctx context.Context, userID uuid.UUID) ([]Session, error)
-	ValidateSession(ctx context.Context, id string) error
+	ValidateSession(ctx context.Context, id string) (Session, error)
 	Deactivate(ctx context.Context, id string) error
 	DeactivateByUserID(ctx context.Context, userID uuid.UUID, except ...string) error
 }
@@ -49,27 +48,24 @@ func NewService(userRepo user.Repository, sessionRepo Repository, timeout time.D
 	}
 }
 
-func (s service) generateSessionID(expiresAt time.Time, userID uuid.UUID) string {
-	unixTime := expiresAt.UnixMilli()
-	unixTimeBytes := *(*[8]byte)(unsafe.Pointer(&unixTime))
-	tokenPayload := append(userID[:], []byte(s.secret)...)
-	tokenPayload = append(tokenPayload, unixTimeBytes[:]...)
-	tokenBytes := sha512.Sum512(tokenPayload)
+func (s service) generateSessionID() string {
+	tokenBytes := [64]byte{}
+	rand.Read(tokenBytes[:])
 	return hex.EncodeToString(tokenBytes[:])
 }
 
-func (s service) ValidateSession(ctx context.Context, id string) error {
+func (s service) ValidateSession(ctx context.Context, id string) (Session, error) {
 	c, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 	session, err := s.sessionRepo.GetByID(c, id)
 	if err != nil {
 		s.logger.Error("error while getting session", "error", err)
-		return err
+		return session, err
 	}
 	if !session.IsActive || session.ExpiresAt.Before(time.Now()) {
-		return ErrSessionIsExpired
+		return session, ErrSessionIsExpired
 	}
-	return nil
+	return session, nil
 }
 
 func (s service) Login(ctx context.Context, email, password string) (user.User, Session, error) {
@@ -88,7 +84,7 @@ func (s service) Login(ctx context.Context, email, password string) (user.User, 
 	expiresAt := time.Now().Add(s.sessionLifeTime)
 	session, err := s.sessionRepo.Create(c, Session{
 		UserID:    dbUser.ID,
-		ID:        s.generateSessionID(expiresAt, dbUser.ID),
+		ID:        s.generateSessionID(),
 		IsActive:  true,
 		ExpiresAt: expiresAt,
 	})

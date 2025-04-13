@@ -22,7 +22,7 @@ type sessionRepository struct {
 	conn *pgxpool.Pool
 }
 
-func NewRepository(conn *pgxpool.Pool) Repository {
+func NewPsqlRepository(conn *pgxpool.Pool) Repository {
 	return sessionRepository{
 		conn: conn,
 	}
