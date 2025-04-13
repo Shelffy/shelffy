@@ -26,3 +26,6 @@ go.work.sum
 .idea
 
 config/config.json
+
+internal/api/gql/gqlmodel/
+internal/api/gql/graph/
