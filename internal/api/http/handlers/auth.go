@@ -2,22 +2,24 @@ package handlers
 
 import (
 	"errors"
-	"github.com/Shelffy/shelffy/internal/api"
-	"github.com/Shelffy/shelffy/internal/api/apictx"
-	"github.com/Shelffy/shelffy/internal/auth"
-	"github.com/Shelffy/shelffy/internal/user"
-	"github.com/google/uuid"
 	"log/slog"
 	"net/http"
+
+	"github.com/Shelffy/shelffy/internal/api"
+	"github.com/Shelffy/shelffy/internal/context_values"
+	"github.com/Shelffy/shelffy/internal/entities"
+	"github.com/Shelffy/shelffy/internal/repositories"
+	"github.com/Shelffy/shelffy/internal/services"
+	"github.com/google/uuid"
 )
 
 type AuthHandler struct {
-	authService auth.Service
-	userService user.Service
+	authService services.Auth
+	userService services.Users
 	logger      *slog.Logger
 }
 
-func NewAuthHandler(authService auth.Service, userService user.Service, logger *slog.Logger) AuthHandler {
+func NewAuthHandler(authService services.Auth, userService services.Users, logger *slog.Logger) AuthHandler {
 	return AuthHandler{
 		authService: authService,
 		userService: userService,
@@ -39,7 +41,7 @@ func (h AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err = h.userService.GetByEmail(r.Context(), registerData.Email)
-	if err != nil && !errors.Is(err, user.ErrUserNotFound) {
+	if err != nil && !errors.Is(err, repositories.ErrUserNotFound) {
 		h.logger.Error("failed to get user", "error", err)
 		err = errorResponse("something went wrong", http.StatusInternalServerError, w)
 		logResponseWriteError(err, h.logger)
@@ -49,7 +51,7 @@ func (h AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		logResponseWriteError(err, h.logger)
 		return
 	}
-	_, err = h.userService.Create(r.Context(), user.User{
+	_, err = h.userService.Create(r.Context(), entities.User{
 		ID:       uuid.New(),
 		Email:    registerData.Email,
 		Password: registerData.Password,
@@ -79,12 +81,12 @@ func (h AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dbUser, session, err := h.authService.Login(r.Context(), loginData.Email, loginData.Password)
-	if err != nil && !errors.Is(err, auth.ErrInvalidCredentials) {
+	if err != nil && !errors.Is(err, services.ErrInvalidCredentials) {
 		h.logger.Error("failed to create session", "error", err)
 		err = errorResponse("something went wrong", http.StatusInternalServerError, w)
 		logResponseWriteError(err, h.logger)
 		return
-	} else if errors.Is(err, auth.ErrInvalidCredentials) {
+	} else if errors.Is(err, services.ErrInvalidCredentials) {
 		err = errorResponse("invalid credentials", http.StatusUnauthorized, w)
 		logResponseWriteError(err, h.logger)
 		return
@@ -104,13 +106,7 @@ func (h AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 func (h AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	sessionID, err := apictx.GetSessionIDFromContext(ctx)
-	if err != nil {
-		h.logger.Error("failed to get session id from context", "error", err)
-		err = errorResponse("something went wrong", http.StatusInternalServerError, w)
-		logResponseWriteError(err, h.logger)
-		return
-	}
+	sessionID := contextvalues.GetSessionIDOrPanic(ctx)
 	if err := h.authService.Deactivate(ctx, sessionID); err != nil {
 		h.logger.Error("failed to deactivate session", "error", err)
 		err = errorResponse("something went wrong", http.StatusInternalServerError, w)
@@ -129,6 +125,6 @@ func (h AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		Partitioned: false,
 	}
 	http.SetCookie(w, &newCookie)
-	err = response(nil, http.StatusOK, w)
+	err := response(nil, http.StatusOK, w)
 	logResponseWriteError(err, h.logger)
 }

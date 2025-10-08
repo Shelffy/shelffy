@@ -5,7 +5,12 @@ type User {
     createdAt: DateTime!
 }
 
-type Query {
+input UserInput {
+    userID: UUID!
+}
+
+
+extend type Query {
     me: User! @isAuthenticated
-    user(id: UUID!): User! @isAuthenticated
+    user(input: UserInput!): User! @isAuthenticated
 }

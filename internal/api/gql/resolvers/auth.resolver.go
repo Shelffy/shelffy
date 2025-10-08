@@ -10,31 +10,29 @@ import (
 	"net/http"
 
 	"github.com/Shelffy/shelffy/internal/api"
-	"github.com/Shelffy/shelffy/internal/api/apictx"
 	"github.com/Shelffy/shelffy/internal/api/gql/gqlmodel"
-	"github.com/Shelffy/shelffy/internal/api/gql/graph"
-	"github.com/Shelffy/shelffy/internal/auth"
-	"github.com/Shelffy/shelffy/internal/user"
-	"github.com/google/uuid"
+	contextvalues "github.com/Shelffy/shelffy/internal/context_values"
+	"github.com/Shelffy/shelffy/internal/entities"
+	"github.com/Shelffy/shelffy/internal/repositories"
+	"github.com/Shelffy/shelffy/internal/services"
 )
 
 // Register is the resolver for the register field.
 func (r *mutationResolver) Register(ctx context.Context, register gqlmodel.RegisterUserInput) (*gqlmodel.User, error) {
-	_, err := r.UserService.GetByEmail(ctx, register.Email)
-	if err != nil && !errors.Is(err, user.ErrUserNotFound) {
+	_, err := r.UsersService.GetByEmail(ctx, register.Email)
+	if err != nil && !errors.Is(err, repositories.ErrUserNotFound) {
 		r.Logger.Error("failed to get user", "error", err)
 		return nil, errors.New("internal error")
 	} else if err == nil {
 		return nil, errors.New("user with this email already exists")
 	}
-	dbUser, err := r.UserService.Create(ctx, user.User{
-		ID:       uuid.New(),
+	dbUser, err := r.UsersService.Create(ctx, entities.User{
 		Email:    register.Email,
+		Username: register.Username,
 		Password: register.Password,
 		IsActive: true,
 	})
 	if err != nil {
-		r.Logger.Error("failed to create user", "error", err)
 		return nil, errors.New("internal error")
 	}
 	return &gqlmodel.User{
@@ -47,16 +45,12 @@ func (r *mutationResolver) Register(ctx context.Context, register gqlmodel.Regis
 
 // Login is the resolver for the login field.
 func (r *mutationResolver) Login(ctx context.Context, login gqlmodel.LoginInput) (*gqlmodel.LoginPayload, error) {
-	w, err := apictx.GetResponseWriter(ctx)
-	if err != nil {
-		r.Logger.Error("failed to get response writer", "error", err)
-		return nil, errors.New("internal error")
-	}
+	w := contextvalues.GetResponseWriterOrPanic(ctx)
 	dbUser, session, err := r.AuthService.Login(ctx, login.Email, login.Password)
-	if err != nil && !errors.Is(err, auth.ErrInvalidCredentials) {
+	if err != nil && !errors.Is(err, services.ErrInvalidCredentials) {
 		r.Logger.Error("failed to create session", "error", err)
 		return nil, errors.New("internal error")
-	} else if errors.Is(err, auth.ErrInvalidCredentials) {
+	} else if errors.Is(err, services.ErrInvalidCredentials) {
 		return nil, errors.New("email or password is incorrect")
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -78,15 +72,8 @@ func (r *mutationResolver) Login(ctx context.Context, login gqlmodel.LoginInput)
 
 // Logout is the resolver for the logout field.
 func (r *mutationResolver) Logout(ctx context.Context) (bool, error) {
-	w, err := apictx.GetResponseWriter(ctx)
-	if err != nil {
-		r.Logger.Error("failed to get response writer", "error", err)
-		return false, errors.New("internal error")
-	}
-	sessionID, err := apictx.GetSessionIDFromContext(ctx)
-	if err != nil {
-		return false, errors.New("unauthorized")
-	}
+	w := contextvalues.GetResponseWriterOrPanic(ctx)
+	sessionID := contextvalues.GetSessionIDOrPanic(ctx)
 	if err := r.AuthService.Logout(ctx, sessionID); err != nil {
 		r.Logger.Error("failed to logout", "error", err)
 		return false, err
@@ -99,8 +86,3 @@ func (r *mutationResolver) Logout(ctx context.Context) (bool, error) {
 	})
 	return true, nil
 }
-
-// Mutation returns graph.MutationResolver implementation.
-func (r *Resolver) Mutation() graph.MutationResolver { return &mutationResolver{r} }
-
-type mutationResolver struct{ *Resolver }

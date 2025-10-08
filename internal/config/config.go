@@ -1,9 +1,11 @@
 package config
 
 import (
-	"gopkg.in/yaml.v3"
 	"os"
 	"time"
+
+	"github.com/nats-io/nats.go"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -15,6 +17,7 @@ const (
 	EnvS3SecretKey        = "S3_SECRET_KEY"
 	EnvS3AccountID        = "S3_ACCOUNT_ID"
 	EnvS3TokenValue       = "S3_TOKEN_VALUE"
+	EnvNATSUrl            = "NATS_URL"
 )
 
 type Server struct {
@@ -52,12 +55,18 @@ type S3 struct {
 	TokenValue      string `json:"token_value" yaml:"token_value"`
 }
 
+type NATS struct {
+	URL string `json:"nats" yaml:"url"`
+}
+
 type Config struct {
 	Auth     Auth     `json:"auth" yaml:"auth"`
 	DB       DB       `json:"db" yaml:"db"`
 	Server   Server   `json:"server" yaml:"server"`
 	Services Services `json:"services" yaml:"services"`
 	S3       S3       `json:"s3" yaml:"s3"`
+	NATS     NATS     `json:"nats" yaml:"nats"`
+	Debug    bool     `json:"debug" yaml:"debug"`
 }
 
 var DefaultConfig = Config{
@@ -91,6 +100,8 @@ var DefaultConfig = Config{
 		BooksBucket:     "",
 		TokenValue:      "",
 	},
+	NATS:  NATS{URL: nats.DefaultURL},
+	Debug: true,
 }
 
 func setENV(config *Config) {
@@ -118,10 +129,13 @@ func setENV(config *Config) {
 	if val := os.Getenv(EnvS3TokenValue); val != "" {
 		config.S3.TokenValue = val
 	}
+	if val := os.Getenv(EnvNATSUrl); val != "" {
+		config.NATS.URL = val
+	}
 }
 
 // Parse parses config.
-// If some variables were provided in environment variables, they will be used
+// If some variables were provided in environment variables, they will be used in the config
 func Parse(filePath string) (config Config, err error) {
 	var file *os.File
 	file, err = os.Open(filePath)

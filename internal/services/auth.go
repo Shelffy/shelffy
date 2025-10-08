@@ -1,16 +1,18 @@
-package auth
+package services
 
 import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"github.com/Shelffy/shelffy/internal/user"
+	"log/slog"
+	"time"
+
+	"github.com/Shelffy/shelffy/internal/entities"
+	"github.com/Shelffy/shelffy/internal/repositories"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/crypto/bcrypt"
-	"log/slog"
-	"time"
 )
 
 var (
@@ -18,27 +20,27 @@ var (
 	ErrSessionIsExpired   = errors.New("session is expired")
 )
 
-type Service interface {
-	Login(ctx context.Context, email, password string) (user.User, Session, error)
+type Auth interface {
+	Login(ctx context.Context, email, password string) (entities.User, entities.Session, error)
 	Logout(ctx context.Context, sessionID string) error
-	GetSessionByID(ctx context.Context, id string) (Session, error)
-	GetSessionByUserID(ctx context.Context, userID uuid.UUID) ([]Session, error)
-	ValidateSession(ctx context.Context, id string) (Session, error)
+	GetSessionByID(ctx context.Context, id string) (entities.Session, error)
+	GetSessionByUserID(ctx context.Context, userID uuid.UUID) ([]entities.Session, error)
+	ValidateSession(ctx context.Context, id string) (entities.Session, error)
 	Deactivate(ctx context.Context, id string) error
 	DeactivateByUserID(ctx context.Context, userID uuid.UUID, except ...string) error
 }
 
-type service struct {
-	userRepo        user.Repository
-	sessionRepo     Repository
+type authService struct {
+	userRepo        repositories.Users
+	sessionRepo     repositories.Session
 	timeout         time.Duration
 	sessionLifeTime time.Duration
 	logger          *slog.Logger
 	secret          string
 }
 
-func NewService(userRepo user.Repository, sessionRepo Repository, timeout time.Duration, sessionLifeTime time.Duration, logger *slog.Logger, secret string) Service {
-	return service{
+func NewAuth(userRepo repositories.Users, sessionRepo repositories.Session, timeout time.Duration, sessionLifeTime time.Duration, logger *slog.Logger, secret string) Auth {
+	return authService{
 		userRepo:        userRepo,
 		sessionRepo:     sessionRepo,
 		timeout:         timeout,
@@ -48,13 +50,13 @@ func NewService(userRepo user.Repository, sessionRepo Repository, timeout time.D
 	}
 }
 
-func (s service) generateSessionID() string {
+func (s authService) generateSessionID() string {
 	tokenBytes := [64]byte{}
-	rand.Read(tokenBytes[:])
+	_, _ = rand.Read(tokenBytes[:])
 	return hex.EncodeToString(tokenBytes[:])
 }
 
-func (s service) ValidateSession(ctx context.Context, id string) (Session, error) {
+func (s authService) ValidateSession(ctx context.Context, id string) (entities.Session, error) {
 	c, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 	session, err := s.sessionRepo.GetByID(c, id)
@@ -68,21 +70,21 @@ func (s service) ValidateSession(ctx context.Context, id string) (Session, error
 	return session, nil
 }
 
-func (s service) Login(ctx context.Context, email, password string) (user.User, Session, error) {
+func (s authService) Login(ctx context.Context, email, password string) (entities.User, entities.Session, error) {
 	c, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 	dbUser, err := s.userRepo.GetByEmail(c, email)
 	if err != nil {
 		s.logger.Error("cannot get user", "error", err)
-		return user.User{}, Session{}, ErrInvalidCredentials
+		return entities.User{}, entities.Session{}, ErrInvalidCredentials
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(dbUser.Password), []byte(password)); err != nil {
-		return user.User{}, Session{}, ErrInvalidCredentials
+		return entities.User{}, entities.Session{}, ErrInvalidCredentials
 	}
 	c, cancel = context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 	expiresAt := time.Now().Add(s.sessionLifeTime)
-	session, err := s.sessionRepo.Create(c, Session{
+	session, err := s.sessionRepo.Create(c, entities.Session{
 		UserID:    dbUser.ID,
 		ID:        s.generateSessionID(),
 		IsActive:  true,
@@ -91,7 +93,7 @@ func (s service) Login(ctx context.Context, email, password string) (user.User, 
 	return dbUser, session, err
 }
 
-func (s service) Logout(ctx context.Context, id string) error {
+func (s authService) Logout(ctx context.Context, id string) error {
 	c, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 	if err := s.sessionRepo.DeleteSession(c, id); err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -101,25 +103,25 @@ func (s service) Logout(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s service) GetSessionByID(ctx context.Context, id string) (Session, error) {
+func (s authService) GetSessionByID(ctx context.Context, id string) (entities.Session, error) {
 	c, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 	return s.sessionRepo.GetByID(c, id)
 }
 
-func (s service) GetSessionByUserID(ctx context.Context, userID uuid.UUID) ([]Session, error) {
+func (s authService) GetSessionByUserID(ctx context.Context, userID uuid.UUID) ([]entities.Session, error) {
 	c, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 	return s.sessionRepo.GetByUserID(c, userID)
 }
 
-func (s service) Deactivate(ctx context.Context, id string) error {
+func (s authService) Deactivate(ctx context.Context, id string) error {
 	c, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 	return s.sessionRepo.Deactivate(c, id)
 }
 
-func (s service) DeactivateByUserID(ctx context.Context, userID uuid.UUID, except ...string) error {
+func (s authService) DeactivateByUserID(ctx context.Context, userID uuid.UUID, except ...string) error {
 	c, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 	return s.sessionRepo.DeactivateByUserID(c, userID, except...)

@@ -1,0 +1,19 @@
+services:
+  shelffy-db:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: "postgres"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+  shelffy-msg-broker:
+    image: nats
+    command:
+      - "-js"
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+volumes:
+  pgdata:

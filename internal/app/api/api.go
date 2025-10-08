@@ -3,22 +3,27 @@ package api
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"net/http"
+	"sync"
+	"time"
+
 	"github.com/Shelffy/shelffy/internal/api/gql"
 	"github.com/Shelffy/shelffy/internal/api/http/routers"
-	"github.com/Shelffy/shelffy/internal/auth"
-	"github.com/Shelffy/shelffy/internal/book"
 	"github.com/Shelffy/shelffy/internal/config"
-	"github.com/Shelffy/shelffy/internal/user"
+	"github.com/Shelffy/shelffy/internal/repositories"
+	"github.com/Shelffy/shelffy/internal/services"
+	"github.com/avito-tech/go-transaction-manager/drivers/pgxv5/v2"
+	"github.com/avito-tech/go-transaction-manager/trm/v2/manager"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	s3config "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"log/slog"
-	"net/http"
-	"sync"
-	"time"
+	"github.com/kr/pretty"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 const (
@@ -26,36 +31,45 @@ const (
 )
 
 type App struct {
-	ctx    context.Context
-	logger *slog.Logger
-	router chi.Router
-	pool   *pgxpool.Pool
-	server *http.Server
+	ctx            context.Context
+	logger         *slog.Logger
+	router         chi.Router
+	pool           *pgxpool.Pool
+	server         *http.Server
+	nc             *nats.Conn
+	eventProcessor services.EventsProcessor
 }
 
-type repositories struct {
-	userRepo user.Repository
-	authRepo auth.Repository
-	bookRepo book.Repository
+type appRepositories struct {
+	userRepo repositories.Users
+	authRepo repositories.Session
+	bookRepo repositories.Books
 }
 
-func newRepositories(conn *pgxpool.Pool) repositories {
-	userRepo := user.NewPsqlRepository(conn)
-	authRepo := auth.NewPsqlRepository(conn)
-	return repositories{
-		userRepo: userRepo,
-		authRepo: authRepo,
-		bookRepo: nil, // WARN: add later
+func newRepositories(conn *pgxpool.Pool) appRepositories {
+	return appRepositories{
+		userRepo: repositories.NewUsersPSQLRepository(conn),
+		authRepo: repositories.NewAuthPSQLRepository(conn),
+		bookRepo: repositories.NewBooksPSQLRepository(conn),
 	}
 }
 
-type services struct {
-	userService user.Service
-	authService auth.Service
-	//bookService book.Service
+type appServices struct {
+	userService     services.Users
+	authService     services.Auth
+	bookService     services.Books
+	storage         services.FileStorage
+	eventsProcessor services.EventsProcessor
 }
 
-func newServices(repos repositories, cfg config.Config, logger *slog.Logger) services {
+func newServices(
+	repos appRepositories,
+	cfg config.Config,
+	s3client *s3.Client,
+	js jetstream.JetStream,
+	txManager *manager.Manager,
+	logger *slog.Logger,
+) appServices {
 	if cfg.Auth.SessionLifeTime == 0 {
 		logger.Warn("session life time is not provided, using default session life time")
 		cfg.Auth.SessionLifeTime = defaultSessionLifeTime
@@ -64,13 +78,15 @@ func newServices(repos repositories, cfg config.Config, logger *slog.Logger) ser
 		logger.Warn("secret is not provided, using default secret")
 		cfg.Auth.Secret = "secret"
 	}
-	return services{
-		userService: user.NewService(
+	storageService := services.NewS3Storage(cfg.S3.BooksBucket, s3client)
+	booksEventsPublisher := services.NewNATSBooksEventPublisher(js)
+	return appServices{
+		userService: services.NewUsers(
 			repos.userRepo,
 			cfg.Services.UserServiceTimeout,
 			logger.WithGroup("user_service"),
 		),
-		authService: auth.NewService(
+		authService: services.NewAuth(
 			repos.userRepo,
 			repos.authRepo,
 			cfg.Services.AuthServiceTimeout,
@@ -78,22 +94,41 @@ func newServices(repos repositories, cfg config.Config, logger *slog.Logger) ser
 			logger.WithGroup("auth_service"),
 			cfg.Auth.Secret,
 		),
+		storage: storageService,
+		bookService: services.NewBookService(
+			repos.bookRepo,
+			storageService,
+			cfg.Services.BookServiceTimeout,
+			booksEventsPublisher,
+			txManager,
+			logger.WithGroup("book_services"),
+		),
+		eventsProcessor: services.NewNATSEventProcessor(
+			js,
+			storageService,
+			logger.WithGroup("events_processor"),
+		),
 	}
 }
 
 func loadS3Config(ctx context.Context, appConfig config.Config) (aws.Config, error) {
 	return s3config.LoadDefaultConfig(
 		ctx,
+		s3config.WithRequestChecksumCalculation(aws.RequestChecksumCalculationWhenRequired),
+		s3config.WithResponseChecksumValidation(aws.ResponseChecksumValidationWhenRequired),
 		s3config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
 			appConfig.S3.AccessKeyID,
 			appConfig.S3.AccessSecretKey,
-			appConfig.S3.AccountID,
+			"",
 		)),
 		s3config.WithRegion("auto"),
 	)
 }
 
 func New(ctx context.Context, config config.Config, logger *slog.Logger) (App, error) {
+	if config.Debug {
+		fmt.Println(pretty.Sprint(config))
+	}
 	pool, err := pgxpool.New(ctx, config.DB.ConnectionString)
 	if err != nil {
 		return App{}, err
@@ -102,17 +137,33 @@ func New(ctx context.Context, config config.Config, logger *slog.Logger) (App, e
 	if err != nil {
 		return App{}, err
 	}
-	_ = s3.NewFromConfig(s3cfg, func(options *s3.Options) { // TODO
+	s3conn := s3.NewFromConfig(s3cfg, func(options *s3.Options) { // TODO
 		options.BaseEndpoint = aws.String(config.S3.APIEndpoint)
 	})
+	nc, err := nats.Connect(config.NATS.URL)
+	if err != nil {
+		return App{}, err
+	}
+	js, err := jetstream.New(nc)
+	if err != nil {
+		return App{}, err
+	}
+	mngr, err := manager.New(pgxv5.NewDefaultFactory(pool))
+	if err != nil {
+		return App{}, err
+	}
 	appServices := newServices(
 		newRepositories(pool),
 		config,
+		s3conn,
+		js,
+		mngr,
 		logger,
 	)
 	graphqlHandler := gql.New(gql.Args{
 		UserService: appServices.userService,
 		AuthService: appServices.authService,
+		BookService: appServices.bookService,
 		Logger:      logger,
 	})
 	router := routers.NewRouter(routers.RouterArgs{
@@ -137,12 +188,19 @@ func New(ctx context.Context, config config.Config, logger *slog.Logger) (App, e
 				slog.LevelError,
 			),
 		},
+		eventProcessor: appServices.eventsProcessor,
+		nc:             nc,
 	}, nil
 }
 
 func (a *App) Run() error {
 	a.LogRoutes()
 	a.logger.Info(fmt.Sprintf("listening port %s", a.server.Addr))
+	go func() {
+		if err := a.eventProcessor.Run(a.ctx); err != nil {
+			a.logger.Error("event processor running error", "error", err)
+		}
+	}()
 	return a.server.ListenAndServe()
 }
 
@@ -157,7 +215,7 @@ func (a *App) LogRoutes() {
 		return nil
 	})
 	if err != nil {
-		a.logger.Debug("Failed to walk routes", "error", err)
+		a.logger.Debug("Failed to walk trough routes", "error", err)
 	}
 }
 
@@ -166,16 +224,15 @@ func (a *App) Stop(timeout time.Duration) {
 	c, cancel := context.WithTimeout(a.ctx, timeout)
 	defer cancel()
 	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
+	wg.Go(func() {
 		if err := a.server.Shutdown(c); err != nil {
 			a.logger.Error("failed to shutdown server", "error", err)
 		} else {
 			a.logger.Info("server stopped")
 		}
 		wg.Done()
-	}()
-	go func() {
+	})
+	wg.Go(func() {
 		ready := make(chan struct{})
 		go func() {
 			a.pool.Close()
@@ -188,6 +245,14 @@ func (a *App) Stop(timeout time.Duration) {
 			a.logger.Info("db connection closed")
 		}
 		wg.Done()
-	}()
+	})
+	wg.Go(func() {
+		if err := a.nc.Drain(); err != nil {
+			a.logger.Error("failed to drain NATS", "error", err)
+		} else {
+			a.logger.Info("NATS stopped")
+		}
+		wg.Done()
+	})
 	wg.Wait()
 }

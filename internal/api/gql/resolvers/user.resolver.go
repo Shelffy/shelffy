@@ -7,19 +7,14 @@ package resolvers
 import (
 	"context"
 
-	"github.com/Shelffy/shelffy/internal/api/apictx"
 	"github.com/Shelffy/shelffy/internal/api/gql/gqlmodel"
-	"github.com/Shelffy/shelffy/internal/api/gql/graph"
-	"github.com/google/uuid"
+	contextvalues "github.com/Shelffy/shelffy/internal/context_values"
 )
 
 // Me is the resolver for the me field.
 func (r *queryResolver) Me(ctx context.Context) (*gqlmodel.User, error) {
-	userID, err := apictx.GetUserIDFromContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	dbUser, err := r.UserService.GetByID(ctx, userID)
+	userID := contextvalues.GetUserIDOrPanic(ctx)
+	dbUser, err := r.UsersService.GetByID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -32,8 +27,8 @@ func (r *queryResolver) Me(ctx context.Context) (*gqlmodel.User, error) {
 }
 
 // User is the resolver for the user field.
-func (r *queryResolver) User(ctx context.Context, id uuid.UUID) (*gqlmodel.User, error) {
-	dbUser, err := r.UserService.GetByID(ctx, id)
+func (r *queryResolver) User(ctx context.Context, input gqlmodel.UserInput) (*gqlmodel.User, error) {
+	dbUser, err := r.UsersService.GetByID(ctx, input.UserID)
 	if err != nil {
 		return nil, err
 	}
@@ -44,8 +39,3 @@ func (r *queryResolver) User(ctx context.Context, id uuid.UUID) (*gqlmodel.User,
 		CreatedAt: dbUser.CreatedAt,
 	}, nil
 }
-
-// Query returns graph.QueryResolver implementation.
-func (r *Resolver) Query() graph.QueryResolver { return &queryResolver{r} }
-
-type queryResolver struct{ *Resolver }

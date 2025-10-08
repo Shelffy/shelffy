@@ -1,0 +1,15 @@
+input BookInput {
+    file: Upload!
+}
+
+type BookPayload {
+    id: UUID!
+    title: String!
+    hash: String!
+    uploadedAt: DateTime!
+    uploadedBy: UUID!
+}
+
+extend type Mutation {
+    uploadBook(input: BookInput): BookPayload! @isAuthenticated
+}

@@ -4,3 +4,7 @@ directive @isAdmin on FIELD_DEFINITION
 
 scalar UUID
 scalar DateTime
+scalar Upload
+
+type Mutation
+type Query

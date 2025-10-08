@@ -1,16 +1,18 @@
 package handlers
 
 import (
-	"github.com/Shelffy/shelffy/internal/api/apictx"
-	"github.com/Shelffy/shelffy/internal/user"
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"log/slog"
 	"net/http"
+
+	"github.com/Shelffy/shelffy/internal/context_values"
+	"github.com/Shelffy/shelffy/internal/entities"
+	"github.com/Shelffy/shelffy/internal/services"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type UserHandler struct {
-	service user.Service
+	service services.Users
 	logger  *slog.Logger
 }
 
@@ -21,7 +23,7 @@ type UserResponse struct {
 	CreatedAt string `json:"created_at"`
 }
 
-func toUserResponse(user user.User) UserResponse {
+func toUserResponse(user entities.User) UserResponse {
 	return UserResponse{
 		ID:        user.ID.String(),
 		Email:     user.Email,
@@ -30,7 +32,7 @@ func toUserResponse(user user.User) UserResponse {
 	}
 }
 
-func NewUserHandler(service user.Service, logger *slog.Logger) UserHandler {
+func NewUserHandler(service services.Users, logger *slog.Logger) UserHandler {
 	return UserHandler{
 		service: service,
 		logger:  logger,
@@ -58,13 +60,7 @@ func (h UserHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h UserHandler) Me(w http.ResponseWriter, r *http.Request) {
-	id, err := apictx.GetUserIDFromContext(r.Context())
-	if err != nil {
-		h.logger.Error("failed to get user id from context", "error", err)
-		err = errorResponse("something went wrong", http.StatusInternalServerError, w)
-		logResponseWriteError(err, h.logger)
-		return
-	}
+	id := contextvalues.GetUserIDOrPanic(r.Context())
 	dbUser, err := h.service.GetByID(r.Context(), id)
 	if err != nil {
 		h.logger.Error("failed to get user", "error", err)

@@ -1,5 +1,6 @@
 input RegisterUserInput {
     email: String!
+    username: String!
     password: String!
 }
 
@@ -8,18 +9,11 @@ input LoginInput {
     password: String!
 }
 
-type Session {
-    id: ID!
-    userID: UUID!
-    isActive: Boolean!
-    expiresAt: DateTime!
-}
-
 type LoginPayload {
     user: User!
 }
 
-type Mutation {
+extend type Mutation {
     register(register: RegisterUserInput!): User!
     login(login: LoginInput!): LoginPayload!
     logout: Boolean! @isAuthenticated

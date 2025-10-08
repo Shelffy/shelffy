@@ -1,8 +1,7 @@
 package resolvers
 
 import (
-	"github.com/Shelffy/shelffy/internal/auth"
-	"github.com/Shelffy/shelffy/internal/user"
+	"github.com/Shelffy/shelffy/internal/services"
 	"log/slog"
 )
 
@@ -11,7 +10,8 @@ import (
 // It serves as dependency injection for your app, add any dependencies you require here.
 
 type Resolver struct {
-	UserService user.Service
-	AuthService auth.Service
-	Logger      *slog.Logger
+	UsersService services.Users
+	AuthService  services.Auth
+	BooksService services.Books
+	Logger       *slog.Logger
 }

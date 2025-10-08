@@ -4,24 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/99designs/gqlgen/graphql"
-	"github.com/Shelffy/shelffy/internal/api"
-	"github.com/Shelffy/shelffy/internal/api/apictx"
-	"github.com/Shelffy/shelffy/internal/auth"
-	"github.com/Shelffy/shelffy/internal/user"
 	"log/slog"
 	"net/http"
+
+	"github.com/99designs/gqlgen/graphql"
+	"github.com/Shelffy/shelffy/internal/api"
+	"github.com/Shelffy/shelffy/internal/context_values"
+	"github.com/Shelffy/shelffy/internal/entities"
+	"github.com/Shelffy/shelffy/internal/services"
 )
 
 const SessionLength = 128
 
 type Auth struct {
-	userService user.Service
-	authService auth.Service
+	userService services.Users
+	authService services.Auth
 	logger      *slog.Logger
 }
 
-func NewAuthMiddleware(userService user.Service, authService auth.Service, logger *slog.Logger) Auth {
+func NewAuthMiddleware(userService services.Users, authService services.Auth, logger *slog.Logger) Auth {
 	return Auth{
 		userService: userService,
 		authService: authService,
@@ -29,21 +30,21 @@ func NewAuthMiddleware(userService user.Service, authService auth.Service, logge
 	}
 }
 
-func (a Auth) getSession(r *http.Request) (auth.Session, error) {
+func (a Auth) getSession(r *http.Request) (entities.Session, error) {
 	sessionCookie, err := r.Cookie(api.SessionIDCookieName)
 	if err != nil {
-		return auth.NilSession, err
+		return entities.NilSession, err
 	}
 	session, err := a.authService.ValidateSession(r.Context(), sessionCookie.Value)
 	if err != nil {
-		return auth.NilSession, err
+		return entities.NilSession, err
 	}
 	return session, nil
 }
 
-func (a Auth) setSessionToCtx(ctx context.Context, session auth.Session) context.Context {
-	ctx = context.WithValue(ctx, apictx.UserIDCtxKey, session.UserID)
-	ctx = context.WithValue(ctx, apictx.AuthSessionIDCtxKey, session.ID)
+func (a Auth) setSessionToCtx(ctx context.Context, session entities.Session) context.Context {
+	ctx = context.WithValue(ctx, contextvalues.UserIDCtxKey, session.UserID)
+	ctx = context.WithValue(ctx, contextvalues.AuthSessionIDCtxKey, session.ID)
 	return ctx
 }
 
@@ -79,7 +80,7 @@ func (a Auth) GQLHandler(next http.Handler) http.Handler {
 }
 
 func (a Auth) GQLDirective(ctx context.Context, obj any, next graphql.Resolver) (res any, err error) {
-	session, err := apictx.GetSessionIDFromContext(ctx)
+	session := contextvalues.GetSessionIDOrPanic(ctx)
 	if err != nil {
 		return nil, errors.New("unauthorized")
 	}

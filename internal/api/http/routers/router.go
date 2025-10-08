@@ -4,8 +4,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/Shelffy/shelffy/internal/api/http/handlers"
 	"github.com/Shelffy/shelffy/internal/api/middlewares"
-	"github.com/Shelffy/shelffy/internal/auth"
-	"github.com/Shelffy/shelffy/internal/user"
+	"github.com/Shelffy/shelffy/internal/services"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"log/slog"
@@ -13,8 +12,8 @@ import (
 )
 
 type RouterArgs struct {
-	UserService user.Service
-	AuthService auth.Service
+	UserService services.Users
+	AuthService services.Auth
 	GQLHandler  http.Handler
 	Logger      *slog.Logger
 }

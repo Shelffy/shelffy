@@ -1,40 +1,41 @@
-package auth
+package repositories
 
 import (
 	"context"
+
 	sq "github.com/Masterminds/squirrel"
+	"github.com/Shelffy/shelffy/internal/entities"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type Repository interface {
-	Create(ctx context.Context, session Session) (Session, error)
-	GetByID(ctx context.Context, id string) (Session, error)
-	GetByUserID(ctx context.Context, userID uuid.UUID) ([]Session, error)
+type Session interface {
+	Create(ctx context.Context, session entities.Session) (entities.Session, error)
+	GetByID(ctx context.Context, id string) (entities.Session, error)
+	GetByUserID(ctx context.Context, userID uuid.UUID) ([]entities.Session, error)
 	Deactivate(ctx context.Context, id string) error
 	DeactivateByUserID(ctx context.Context, userID uuid.UUID, exceptSessionIDs ...string) error
 	DeleteSession(ctx context.Context, id string) error
 	DeleteSessionsByUserID(ctx context.Context, userID uuid.UUID, except ...string) error
 }
 
-type sessionRepository struct {
+type postgresSessionRepository struct {
 	conn *pgxpool.Pool
 }
 
-func NewPsqlRepository(conn *pgxpool.Pool) Repository {
-	return sessionRepository{
+func NewAuthPSQLRepository(conn *pgxpool.Pool) Session {
+	return postgresSessionRepository{
 		conn: conn,
 	}
 }
 
-func (r sessionRepository) scanSessionRow(row pgx.Row) (Session, error) {
-	session := Session{}
+func (r postgresSessionRepository) scanSessionRow(row scannable) (entities.Session, error) {
+	session := entities.Session{}
 	err := row.Scan(&session.ID, &session.UserID, &session.IsActive, &session.ExpiresAt)
 	return session, err
 }
 
-func (r sessionRepository) Create(ctx context.Context, session Session) (Session, error) {
+func (r postgresSessionRepository) Create(ctx context.Context, session entities.Session) (entities.Session, error) {
 	query := `
 INSERT INTO sessions (id, user_id, is_active, expires_at)
 VALUES ($1, $2, $3, $4)
@@ -43,7 +44,7 @@ RETURNING id, user_id, is_active, expires_at;`
 	return r.scanSessionRow(row)
 }
 
-func (r sessionRepository) GetByID(ctx context.Context, id string) (Session, error) {
+func (r postgresSessionRepository) GetByID(ctx context.Context, id string) (entities.Session, error) {
 	query := `
 SELECT id, user_id , is_active, expires_at
 FROM sessions
@@ -52,7 +53,7 @@ WHERE id = $1`
 	return r.scanSessionRow(row)
 }
 
-func (r sessionRepository) GetByUserID(ctx context.Context, userID uuid.UUID) ([]Session, error) {
+func (r postgresSessionRepository) GetByUserID(ctx context.Context, userID uuid.UUID) ([]entities.Session, error) {
 	query := `
 SELECT id, user_id, is_active, expires_at
 FROM sessions
@@ -62,7 +63,7 @@ WHERE user_id = $1`
 		return nil, err
 	}
 	defer rows.Close()
-	var sessions []Session
+	var sessions []entities.Session
 	for rows.Next() {
 		session, err := r.scanSessionRow(rows)
 		if err != nil {
@@ -73,7 +74,7 @@ WHERE user_id = $1`
 	return sessions, nil
 }
 
-func (r sessionRepository) Update(ctx context.Context, id string, fieldValue map[string]any) (Session, error) {
+func (r postgresSessionRepository) Update(ctx context.Context, id string, fieldValue map[string]any) (entities.Session, error) {
 	builder := sq.Update("sessions").
 		SetMap(fieldValue).
 		Where(sq.Eq{"id": id}).
@@ -81,19 +82,19 @@ func (r sessionRepository) Update(ctx context.Context, id string, fieldValue map
 		PlaceholderFormat(sq.Dollar)
 	query, args, err := builder.ToSql()
 	if err != nil {
-		return Session{}, err
+		return entities.Session{}, err
 	}
 	row := r.conn.QueryRow(ctx, query, args...)
 	return r.scanSessionRow(row)
 }
 
-func (r sessionRepository) Deactivate(ctx context.Context, id string) error {
+func (r postgresSessionRepository) Deactivate(ctx context.Context, id string) error {
 	query := `UPDATE sessions SET is_active = false WHERE id = $1`
 	_, err := r.conn.Exec(ctx, query, id)
 	return err
 }
 
-func (r sessionRepository) DeactivateByUserID(ctx context.Context, userID uuid.UUID, exceptSessionIDs ...string) error {
+func (r postgresSessionRepository) DeactivateByUserID(ctx context.Context, userID uuid.UUID, exceptSessionIDs ...string) error {
 	builder := `
 UPDATE sessions
 SET is_active = false
@@ -102,7 +103,7 @@ WHERE user_id = $1 AND id NOT IN ($2)`
 	return err
 }
 
-func (r sessionRepository) DeleteSession(ctx context.Context, id string) error {
+func (r postgresSessionRepository) DeleteSession(ctx context.Context, id string) error {
 	query := `
 DELETE FROM sessions
 WHERE id = $1`
@@ -110,7 +111,7 @@ WHERE id = $1`
 	return err
 }
 
-func (r sessionRepository) DeleteSessionsByUserID(ctx context.Context, userID uuid.UUID, except ...string) error {
+func (r postgresSessionRepository) DeleteSessionsByUserID(ctx context.Context, userID uuid.UUID, except ...string) error {
 	query := `
 DELETE FROM sessions
 WHERE user_id = $1 AND id NOT IN ($2)`
