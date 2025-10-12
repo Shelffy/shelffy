@@ -1,10 +1,11 @@
-directive @isAuthenticated on FIELD_DEFINITION
-directive @isOwner on FIELD_DEFINITION
-directive @isAdmin on FIELD_DEFINITION
+directive @Auth on FIELD_DEFINITION
 
 scalar UUID
 scalar DateTime
 scalar Upload
+scalar Uint
+scalar Uint32
+scalar Uint64
 
 type Mutation
 type Query

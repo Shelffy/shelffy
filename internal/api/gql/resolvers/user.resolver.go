@@ -13,8 +13,8 @@ import (
 
 // Me is the resolver for the me field.
 func (r *queryResolver) Me(ctx context.Context) (*gqlmodel.User, error) {
-	userID := contextvalues.GetUserIDOrPanic(ctx)
-	dbUser, err := r.UsersService.GetByID(ctx, userID)
+	user := contextvalues.GetUserOrPanic(ctx)
+	dbUser, err := r.UsersService.GetByID(ctx, user.ID)
 	if err != nil {
 		return nil, err
 	}

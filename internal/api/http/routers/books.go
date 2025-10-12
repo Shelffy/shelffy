@@ -7,18 +7,16 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-type AuthRouterArgs struct {
-	Handler        handlers.AuthHandler
+type BooksRouterArgs struct {
+	Handler        handlers.BooksHandler
 	AuthMiddleware func(http.Handler) http.Handler
 }
 
-func NewAuthRouter(args AuthRouterArgs) *chi.Mux {
+func NewBooksRouter(args BooksRouterArgs) *chi.Mux {
 	router := chi.NewRouter()
-	router.Post("/register", args.Handler.Register)
-	router.Post("/login", args.Handler.Login)
 	router.Group(func(r chi.Router) {
 		r.Use(args.AuthMiddleware)
-		r.Post("/logout", args.Handler.Logout)
+		r.Get("/{id}", args.Handler.GetContentByID)
 	})
 
 	return router

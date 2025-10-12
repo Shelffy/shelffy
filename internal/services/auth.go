@@ -32,7 +32,7 @@ type Auth interface {
 
 type authService struct {
 	userRepo        repositories.Users
-	sessionRepo     repositories.Session
+	sessionsRepo    repositories.Session
 	timeout         time.Duration
 	sessionLifeTime time.Duration
 	logger          *slog.Logger
@@ -42,7 +42,7 @@ type authService struct {
 func NewAuth(userRepo repositories.Users, sessionRepo repositories.Session, timeout time.Duration, sessionLifeTime time.Duration, logger *slog.Logger, secret string) Auth {
 	return authService{
 		userRepo:        userRepo,
-		sessionRepo:     sessionRepo,
+		sessionsRepo:    sessionRepo,
 		timeout:         timeout,
 		sessionLifeTime: sessionLifeTime,
 		logger:          logger,
@@ -59,7 +59,7 @@ func (s authService) generateSessionID() string {
 func (s authService) ValidateSession(ctx context.Context, id string) (entities.Session, error) {
 	c, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	session, err := s.sessionRepo.GetByID(c, id)
+	session, err := s.sessionsRepo.GetByID(c, id)
 	if err != nil {
 		s.logger.Error("error while getting session", "error", err)
 		return session, err
@@ -84,7 +84,7 @@ func (s authService) Login(ctx context.Context, email, password string) (entitie
 	c, cancel = context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 	expiresAt := time.Now().Add(s.sessionLifeTime)
-	session, err := s.sessionRepo.Create(c, entities.Session{
+	session, err := s.sessionsRepo.Create(c, entities.Session{
 		UserID:    dbUser.ID,
 		ID:        s.generateSessionID(),
 		IsActive:  true,
@@ -96,7 +96,7 @@ func (s authService) Login(ctx context.Context, email, password string) (entitie
 func (s authService) Logout(ctx context.Context, id string) error {
 	c, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	if err := s.sessionRepo.DeleteSession(c, id); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+	if err := s.sessionsRepo.DeleteSession(c, id); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		s.logger.Error("error while deleting session", "error", err)
 		return err
 	}
@@ -106,23 +106,23 @@ func (s authService) Logout(ctx context.Context, id string) error {
 func (s authService) GetSessionByID(ctx context.Context, id string) (entities.Session, error) {
 	c, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	return s.sessionRepo.GetByID(c, id)
+	return s.sessionsRepo.GetByID(c, id)
 }
 
 func (s authService) GetSessionByUserID(ctx context.Context, userID uuid.UUID) ([]entities.Session, error) {
 	c, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	return s.sessionRepo.GetByUserID(c, userID)
+	return s.sessionsRepo.GetByUserID(c, userID)
 }
 
 func (s authService) Deactivate(ctx context.Context, id string) error {
 	c, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	return s.sessionRepo.Deactivate(c, id)
+	return s.sessionsRepo.Deactivate(c, id)
 }
 
 func (s authService) DeactivateByUserID(ctx context.Context, userID uuid.UUID, except ...string) error {
 	c, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	return s.sessionRepo.DeactivateByUserID(c, userID, except...)
+	return s.sessionsRepo.DeactivateByUserID(c, userID, except...)
 }

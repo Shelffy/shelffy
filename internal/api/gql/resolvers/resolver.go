@@ -1,8 +1,10 @@
 package resolvers
 
 import (
-	"github.com/Shelffy/shelffy/internal/services"
 	"log/slog"
+
+	"github.com/Shelffy/shelffy/internal/config"
+	"github.com/Shelffy/shelffy/internal/services"
 )
 
 // This file will not be regenerated automatically.
@@ -14,4 +16,5 @@ type Resolver struct {
 	AuthService  services.Auth
 	BooksService services.Books
 	Logger       *slog.Logger
+	AppEndpoints config.Endpoints
 }

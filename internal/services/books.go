@@ -20,9 +20,10 @@ var (
 )
 
 type Books interface {
-	Upload(ctx context.Context, book entities.Book, content io.Reader) (entities.Book, error)
+	Upload(ctx context.Context, book entities.Book, contentLength int64, content io.Reader) (entities.Book, error)
 	Delete(ctx context.Context, bookID uuid.UUID) error
 	GetByID(ctx context.Context, bookID uuid.UUID) (entities.Book, error)
+	GetManyByUserID(ctx context.Context, bookID uuid.UUID, limit, offset *uint64) ([]entities.Book, error)
 	GetByTitleAndUserID(ctx context.Context, title string, userID uuid.UUID) (entities.Book, error)
 	GetBookContentByID(ctx context.Context, bookID uuid.UUID) (io.Reader, error)
 }
@@ -63,12 +64,12 @@ func (s booksService) createStoragePath(ownerUsername string, title string) stri
 	return builder.String()
 }
 
-func (s booksService) Upload(ctx context.Context, book entities.Book, content io.Reader) (entities.Book, error) {
+func (s booksService) Upload(ctx context.Context, book entities.Book, contentLength int64, content io.Reader) (entities.Book, error) {
 	l := s.logger.WithGroup("Upload")
 	book.StoragePath = s.createStoragePath(book.UploadedBy.String(), uuid.New().String())
 	hash := sha256.New()
 	reader := io.TeeReader(content, hash)
-	if err := s.storageService.Upload(ctx, book.StoragePath, reader); err != nil {
+	if err := s.storageService.Upload(ctx, book.StoragePath, contentLength, reader); err != nil {
 		l.Error("could not upload file to storage", "error", err.Error(), "path", book.StoragePath)
 		return entities.Book{}, ErrInternal
 	}
@@ -157,4 +158,19 @@ func (s booksService) GetBookContentByID(ctx context.Context, bookID uuid.UUID) 
 		return nil, err
 	}
 	return content, nil
+}
+
+func (s booksService) GetManyByUserID(ctx context.Context, userID uuid.UUID, limit, offset *uint64) ([]entities.Book, error) {
+	l := s.logger.WithGroup("GetManyByUserID")
+	c, cancel := context.WithTimeout(ctx, s.timeout)
+	defer cancel()
+	books, err := s.booksRepository.GetManyByUserID(c, userID, limit, offset)
+	if err != nil {
+		if !errors.Is(err, repositories.ErrBookNotFound) {
+			l.Error("cannot get books from book's repository", "error", err.Error())
+			return nil, ErrInternal
+		}
+		return nil, ErrBookNotFound
+	}
+	return books, nil
 }

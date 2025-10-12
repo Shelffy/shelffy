@@ -60,14 +60,7 @@ func (h UserHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h UserHandler) Me(w http.ResponseWriter, r *http.Request) {
-	id := contextvalues.GetUserIDOrPanic(r.Context())
-	dbUser, err := h.service.GetByID(r.Context(), id)
-	if err != nil {
-		h.logger.Error("failed to get user", "error", err)
-		err = errorResponse("something went wrong", http.StatusInternalServerError, w)
-		logResponseWriteError(err, h.logger)
-		return
-	}
-	err = response(R{"user": toUserResponse(dbUser)}, http.StatusOK, w)
+	user := contextvalues.GetUserOrPanic(r.Context())
+	err := response(R{"user": toUserResponse(user)}, http.StatusOK, w)
 	logResponseWriteError(err, h.logger)
 }

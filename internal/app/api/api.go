@@ -137,7 +137,7 @@ func New(ctx context.Context, config config.Config, logger *slog.Logger) (App, e
 	if err != nil {
 		return App{}, err
 	}
-	s3conn := s3.NewFromConfig(s3cfg, func(options *s3.Options) { // TODO
+	s3conn := s3.NewFromConfig(s3cfg, func(options *s3.Options) {
 		options.BaseEndpoint = aws.String(config.S3.APIEndpoint)
 	})
 	nc, err := nats.Connect(config.NATS.URL)
@@ -160,18 +160,27 @@ func New(ctx context.Context, config config.Config, logger *slog.Logger) (App, e
 		mngr,
 		logger,
 	)
-	graphqlHandler := gql.New(gql.Args{
-		UserService: appServices.userService,
-		AuthService: appServices.authService,
-		BookService: appServices.bookService,
-		Logger:      logger,
-	})
-	router := routers.NewRouter(routers.RouterArgs{
-		GQLHandler:  graphqlHandler,
-		UserService: appServices.userService,
-		AuthService: appServices.authService,
-		Logger:      logger,
-	})
+	graphqlHandler := gql.New(
+		gql.Args{
+			UserService: appServices.userService,
+			AuthService: appServices.authService,
+			BookService: appServices.bookService,
+			Endpoints:   config.Server.Endpoints,
+			Logger:      logger,
+		},
+		config.Debug,
+	)
+	router := routers.NewRouter(
+		routers.RouterArgs{
+			GQLHandler:     graphqlHandler,
+			UserService:    appServices.userService,
+			AuthService:    appServices.authService,
+			BooksService:   appServices.bookService,
+			StorageService: appServices.storage,
+			Logger:         logger,
+		},
+		config.Server.Endpoints,
+	)
 	return App{
 		ctx:    ctx,
 		logger: logger,

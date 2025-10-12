@@ -42,10 +42,13 @@ func (a Auth) getSession(r *http.Request) (entities.Session, error) {
 	return session, nil
 }
 
-func (a Auth) setSessionToCtx(ctx context.Context, session entities.Session) context.Context {
-	ctx = context.WithValue(ctx, contextvalues.UserIDCtxKey, session.UserID)
-	ctx = context.WithValue(ctx, contextvalues.AuthSessionIDCtxKey, session.ID)
+func (a Auth) setSessionToCtx(ctx context.Context, sessionID string) context.Context {
+	ctx = context.WithValue(ctx, contextvalues.AuthSessionIDCtxKey, sessionID)
 	return ctx
+}
+
+func (a Auth) setUserToCtx(ctx context.Context, user entities.User) context.Context {
+	return context.WithValue(ctx, contextvalues.UserCtxKey, user)
 }
 
 func (a Auth) HTTPHandler(next http.Handler) http.Handler {
@@ -55,11 +58,20 @@ func (a Auth) HTTPHandler(next http.Handler) http.Handler {
 			if err != nil {
 				w.WriteHeader(http.StatusUnauthorized)
 				if err := json.NewEncoder(w).Encode(map[string]any{"error": "unauthorized"}); err != nil {
-					a.logger.Error("failed to write response", "error", err)
+					a.logger.Error("failed to write response", "error", err.Error())
 					return
 				}
 			}
-			r = r.WithContext(a.setSessionToCtx(r.Context(), session))
+			user, err := a.userService.GetByID(r.Context(), session.UserID)
+			if err != nil {
+				a.logger.Error("error while trying to get user in auth middleware", "error", err.Error())
+				if err := json.NewEncoder(w).Encode(map[string]any{"error": "unauthorized"}); err != nil {
+					a.logger.Error("failed to write response", "error", err.Error())
+					return
+				}
+			}
+			r = r.WithContext(a.setSessionToCtx(r.Context(), session.ID))
+			r = r.WithContext(a.setUserToCtx(r.Context(), user))
 			next.ServeHTTP(w, r)
 		},
 	)
@@ -73,7 +85,16 @@ func (a Auth) GQLHandler(next http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			r = r.WithContext(a.setSessionToCtx(r.Context(), session))
+			user, err := a.userService.GetByID(r.Context(), session.UserID)
+			if err != nil {
+				a.logger.Error("error while trying to get user in auth middleware", "error", err.Error())
+				if err := json.NewEncoder(w).Encode(map[string]any{"error": "unauthorized"}); err != nil {
+					a.logger.Error("failed to write response", "error", err.Error())
+					return
+				}
+			}
+			r = r.WithContext(a.setSessionToCtx(r.Context(), session.ID))
+			r = r.WithContext(a.setUserToCtx(r.Context(), user))
 			next.ServeHTTP(w, r)
 		},
 	)
@@ -81,9 +102,6 @@ func (a Auth) GQLHandler(next http.Handler) http.Handler {
 
 func (a Auth) GQLDirective(ctx context.Context, obj any, next graphql.Resolver) (res any, err error) {
 	session := contextvalues.GetSessionIDOrPanic(ctx)
-	if err != nil {
-		return nil, errors.New("unauthorized")
-	}
 	if session == "" || len(session) < SessionLength {
 		return nil, errors.New("invalid session value")
 	}

@@ -1,4 +1,4 @@
-input BookInput {
+input UploadBookInput {
     file: Upload!
 }
 
@@ -8,8 +8,38 @@ type BookPayload {
     hash: String!
     uploadedAt: DateTime!
     uploadedBy: UUID!
+    url: String!
+}
+
+type UserBookPayload {
+    id: UUID!
+    title: String!
+    hash: String!
+    uploadedAt: DateTime!
+    uploadedBy: UUID!
+    url: String!
+}
+
+input BookInput {
+    id: UUID!
+}
+
+input UserBooksTitleInput {
+    userID: UUID!
+    title: String!
+}
+
+input userBookTitleInput {
+    userID: UUID!
+    title: String!
+}
+
+extend type Query {
+    book(input: BookInput): BookPayload!  @Auth
+    userBooks(limit: Uint64, offset: Uint64): [BookPayload!]! @Auth
+    userBookTitle(input: userBookTitleInput): BookPayload! @Auth
 }
 
 extend type Mutation {
-    uploadBook(input: BookInput): BookPayload! @isAuthenticated
+    uploadBook(input: UploadBookInput): BookPayload! @Auth
 }

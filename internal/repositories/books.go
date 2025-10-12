@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	sq "github.com/Masterminds/squirrel"
 	"github.com/Shelffy/shelffy/internal/entities"
 	"github.com/Shelffy/shelffy/internal/query-builder/postgres/public/model"
 	"github.com/avito-tech/go-transaction-manager/drivers/pgxv5/v2"
@@ -16,6 +17,16 @@ import (
 var (
 	ErrBookNotFound = fmt.Errorf("user book not found")
 )
+
+type Books interface {
+	Create(ctx context.Context, book entities.Book) (entities.Book, error)
+
+	Delete(ctx context.Context, bookID uuid.UUID) error
+	GetByID(ctx context.Context, bookID uuid.UUID) (entities.Book, error)
+	GetByTitleAndUserID(ctx context.Context, title string, userID uuid.UUID) (entities.Book, error)
+	GetByHash(ctx context.Context, hash entities.BookHash) ([]entities.Book, error)
+	GetManyByUserID(ctx context.Context, userID uuid.UUID, limit, offset *uint64) ([]entities.Book, error)
+}
 
 func entityBookToModel(book entities.Book) model.Books {
 	return model.Books{
@@ -48,15 +59,6 @@ func scanIntoBookModel(row scannable) (book model.Books, err error) {
 	return
 }
 
-type Books interface {
-	Create(ctx context.Context, book entities.Book) (entities.Book, error)
-
-	Delete(ctx context.Context, bookID uuid.UUID) error
-	GetByID(ctx context.Context, bookID uuid.UUID) (entities.Book, error)
-	GetByTitleAndUserID(ctx context.Context, title string, userID uuid.UUID) (entities.Book, error)
-	GetByHash(ctx context.Context, hash entities.BookHash) ([]entities.Book, error)
-}
-
 type postgresBooksRepository struct {
 	pool   *pgxpool.Pool
 	getter *pgxv5.CtxGetter
@@ -70,17 +72,16 @@ func NewBooksPSQLRepository(pool *pgxpool.Pool) Books {
 }
 
 func (r postgresBooksRepository) Create(ctx context.Context, bookToCreate entities.Book) (entities.Book, error) {
-	return entities.Book{}, errors.New("")
-	//	book := entityBookToModel(bookToCreate)
-	//	sql := `INSERT INTO books(id, hash, uploaded_by, path, title)
-	//VALUES ($1, $2, $3, $4, $5)
-	//RETURNING id, hash, uploaded_by, uploaded_at, path, title`
-	//
-	//	b, err := scanIntoBookModel(r.pool.QueryRow(ctx, sql, book.ID, book.Hash, book.UploadedBy, book.Path, book.Title))
-	//	if err != nil {
-	//		return entities.Book{}, err
-	//	}
-	//	return bookModelToEntity(b), nil
+	book := entityBookToModel(bookToCreate)
+	sql := `INSERT INTO books(id, hash, uploaded_by, path, title)
+	VALUES ($1, $2, $3, $4, $5)
+	RETURNING id, hash, uploaded_by, uploaded_at, path, title`
+
+	b, err := scanIntoBookModel(r.pool.QueryRow(ctx, sql, book.ID, book.Hash, book.UploadedBy, book.Path, book.Title))
+	if err != nil {
+		return entities.Book{}, err
+	}
+	return bookModelToEntity(b), nil
 }
 
 func (r postgresBooksRepository) Delete(ctx context.Context, bookID uuid.UUID) error {
@@ -124,6 +125,39 @@ SELECT id, hash, uploaded_by, uploaded_at, path, title
 FROM books
 WHERE hash = $1`
 	rows, err := r.pool.Query(ctx, sql, hash)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrBookNotFound
+		}
+		return nil, err
+	}
+	books := make([]entities.Book, 0, 1)
+	for rows.Next() {
+		book, err := scanIntoBookModel(rows)
+		if err != nil {
+			return nil, err
+		}
+		books = append(books, bookModelToEntity(book))
+	}
+	return books, nil
+}
+
+func (r postgresBooksRepository) GetManyByUserID(ctx context.Context, userID uuid.UUID, limit, offset *uint64) ([]entities.Book, error) {
+	builder := sq.Select("id", "hash", "uploaded_by", "uploaded_at", "path", "title").
+		From("books").
+		Where("uploaded_by = ?", userID).
+		PlaceholderFormat(sq.Dollar)
+	if limit != nil {
+		builder = builder.Limit(*limit)
+	}
+	if offset != nil {
+		builder = builder.Limit(*offset)
+	}
+	sql, args, err := builder.ToSql()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := r.pool.Query(ctx, sql, args...)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, ErrBookNotFound

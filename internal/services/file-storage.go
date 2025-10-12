@@ -14,7 +14,7 @@ import (
 )
 
 type FileStorage interface {
-	Upload(ctx context.Context, path string, bookContent io.Reader) error
+	Upload(ctx context.Context, path string, contentLength int64, bookContent io.Reader) error
 	Get(ctx context.Context, path string) (io.ReadCloser, error)
 	Delete(ctx context.Context, path string) error
 	BatchDelete(ctx context.Context, paths ...string) ([]NotDeleted, error)
@@ -36,11 +36,12 @@ func NewS3Storage(bucket string, client *s3.Client) FileStorage {
 	}
 }
 
-func (s s3storage) Upload(ctx context.Context, path string, bookContent io.Reader) error {
+func (s s3storage) Upload(ctx context.Context, path string, contentLength int64, bookContent io.Reader) error {
 	_, err := s.s3client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(s.bucketName),
-		Key:    aws.String(path),
-		Body:   bookContent,
+		Bucket:        aws.String(s.bucketName),
+		Key:           aws.String(path),
+		ContentLength: aws.Int64(contentLength),
+		Body:          bookContent,
 	})
 	return err
 }

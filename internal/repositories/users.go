@@ -35,12 +35,12 @@ func NewUsersPSQLRepository(conn *pgxpool.Pool) Users {
 
 func (r postgresUsersRepository) scanUserRow(row pgx.Row) (entities.User, error) {
 	user := entities.User{}
-	err := row.Scan(&user.ID, &user.Email, &user.Password, &user.IsActive, &user.CreatedAt)
+	err := row.Scan(&user.ID, &user.Email, &user.Password, &user.IsActive, &user.CreatedAt, &user.IsAdmin)
 	return user, err
 }
 
 func (r postgresUsersRepository) getByField(ctx context.Context, field string, value any) (entities.User, error) {
-	query := fmt.Sprintf(`SELECT id, email, password, is_active, created_at FROM users WHERE %s = $1`, field)
+	query := fmt.Sprintf(`SELECT id, email, password, is_active, created_at, is_admin FROM users WHERE %s = $1`, field)
 	user, err := r.scanUserRow(r.conn.QueryRow(ctx, query, value))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -64,7 +64,7 @@ func (r postgresUsersRepository) Create(ctx context.Context, user entities.User)
 	query := `
 INSERT INTO users (id, email, password, is_active, username) 
 VALUES ($1, $2, $3, $4, $5)
-RETURNING id, email, password, is_active, created_at`
+RETURNING id, email, password, is_active, created_at, is_admin`
 	row := r.conn.QueryRow(ctx, query, user.ID, user.Email, user.Password, user.IsActive, user.Username)
 	return r.scanUserRow(row)
 }
@@ -76,7 +76,7 @@ func (r postgresUsersRepository) Update(ctx context.Context, userID uuid.UUID, f
 	builder := sq.Update("users").
 		SetMap(fieldValue).
 		Where(sq.Eq{"id": userID}).
-		Suffix("RETURNING id, email, password, is_active, created_at").
+		Suffix("RETURNING id, email, password, is_active, created_at, is_admin").
 		PlaceholderFormat(sq.Dollar)
 	query, args, err := builder.ToSql()
 	if err != nil {
@@ -91,7 +91,7 @@ func (r postgresUsersRepository) Deactivate(ctx context.Context, id uuid.UUID) (
 UPDATE users 
 SET is_active = false 
 WHERE id = $1 
-RETURNING id, email, password, is_active, created_at`
+RETURNING id, email, password, is_active, created_at, is_admin`
 	row := r.conn.QueryRow(ctx, query, id)
 	return r.scanUserRow(row)
 }

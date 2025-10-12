@@ -6,31 +6,15 @@ import (
 
 	"github.com/Shelffy/shelffy/internal/entities"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/google/uuid"
 )
 
 const (
-	UserIDCtxKey         = "c-user-id"
 	UserCtxKey           = "c-user"
 	AuthSessionIDCtxKey  = "c-auth-session-id"
 	ResponseWriterAccess = "c-response-writer-access"
+	BaseURLCtxKey        = "c-base-url"
+	IsAdminCtxKey        = "c-is-admin"
 )
-
-func GetUserID(ctx context.Context) uuid.UUID {
-	value, ok := ctx.Value(UserIDCtxKey).(uuid.UUID)
-	if !ok {
-		return uuid.Nil
-	}
-	return value
-}
-
-func GetUserIDOrPanic(ctx context.Context) uuid.UUID {
-	id := GetUserID(ctx)
-	if id == uuid.Nil {
-		panic("user id shouldn't be nil")
-	}
-	return id
-}
 
 func GetUser(ctx context.Context) entities.User {
 	value, ok := ctx.Value(UserCtxKey).(entities.User)
@@ -59,7 +43,7 @@ func GetSessionID(ctx context.Context) string {
 func GetSessionIDOrPanic(ctx context.Context) string {
 	session := GetSessionID(ctx)
 	if session == "" {
-		panic("session shouldn't be empty")
+		panic("session value expected in context")
 	}
 	return session
 }
@@ -80,6 +64,19 @@ func GetResponseWriterOrPanic(ctx context.Context) http.ResponseWriter {
 	return w
 }
 
+func GetBaseURL(ctx context.Context) string {
+	url := ctx.Value(BaseURLCtxKey)
+	if url, ok := url.(string); ok {
+		return url
+	} else {
+		panic("must be unreachable")
+	}
+}
+
 func GetRequestID(ctx context.Context) string {
 	return middleware.GetReqID(ctx)
+}
+
+func GetIsAdmin(ctx context.Context) bool {
+	return ctx.Value(IsAdminCtxKey).(bool)
 }

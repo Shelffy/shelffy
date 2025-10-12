@@ -11,6 +11,6 @@ input UserInput {
 
 
 extend type Query {
-    me: User! @isAuthenticated
-    user(input: UserInput!): User! @isAuthenticated
+    me: User! @Auth
+    user(input: UserInput!): User! @Auth
 }

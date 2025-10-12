@@ -13,4 +13,5 @@ type User struct {
 	Email     string    `json:"email,omitempty"`
 	Password  string    `json:"password,omitempty"`
 	IsActive  bool      `json:"is_active,omitempty"`
+	IsAdmin   bool      `json:"is_admin,omitempty"`
 }

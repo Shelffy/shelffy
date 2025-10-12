@@ -16,5 +16,5 @@ type LoginPayload {
 extend type Mutation {
     register(register: RegisterUserInput!): User!
     login(login: LoginInput!): LoginPayload!
-    logout: Boolean! @isAuthenticated
+    logout: Boolean! @Auth
 }
