@@ -20,11 +20,34 @@ const (
 	EnvNATSUrl            = "NATS_URL"
 )
 
+type Endpoints struct {
+	API APIEndpoints `json:"api" yaml:"api"`
+}
+
+type APIEndpoints struct {
+	Base string             `json:"base" yaml:"base"`
+	V1   APIV1BaseEndpoints `json:"v1" yaml:"v1"`
+	GQL  GQLEndpoints       `json:"gql" yaml:"gql"`
+}
+
+type APIV1BaseEndpoints struct {
+	Base  string `json:"base" yaml:"base"`
+	Books string `json:"books" yaml:"books"`
+	Users string `json:"users" yaml:"users"`
+	Auth  string `json:"auth" yaml:"auth"`
+}
+
+type GQLEndpoints struct {
+	Base  string `json:"base" yaml:"base"`
+	Query string `json:"query" yaml:"query"`
+}
+
 type Server struct {
 	Port         string        `json:"port" yaml:"port"`
 	ReadTimeout  time.Duration `json:"read_timeout" yaml:"read_timeout"`
 	WriteTimeout time.Duration `json:"write_timeout" yaml:"write_timeout"`
 	IdleTimeout  time.Duration `json:"idle_timeout" yaml:"idle_timeout"`
+	Endpoints    Endpoints     `json:"endpoints" yaml:"endpoints"`
 }
 
 type Services struct {
@@ -43,7 +66,7 @@ type DB struct {
 	MaxConnections   int           `json:"max_connections" yaml:"max_connections"`
 	MinConnections   int           `json:"min_connections" yaml:"min_connections"`
 	MaxIdleTime      time.Duration `json:"max_idle_time" yaml:"max_idle_time"`
-	MaxLifetime      time.Duration `json:"max_lifetime" yaml:"max_lifetime"`
+	MaxLifetime      time.Duration `json:"max_life_time" yaml:"max_lifetime"`
 }
 
 type S3 struct {
@@ -75,6 +98,21 @@ var DefaultConfig = Config{
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  10 * time.Second,
+		Endpoints: Endpoints{
+			API: APIEndpoints{
+				Base: "/api",
+				V1: APIV1BaseEndpoints{
+					Base:  "/v1",
+					Books: "/books",
+					Users: "/users",
+					Auth:  "/auth",
+				},
+				GQL: GQLEndpoints{
+					Base:  "/gql",
+					Query: "/query",
+				},
+			},
+		},
 	},
 	Services: Services{
 		UserServiceTimeout: 10 * time.Second,
